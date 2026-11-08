@@ -89,6 +89,7 @@ class Panel:
         self.verbose = verbose
         self.enabled = False
         self.ready = False
+        self.banner = None
         self.selected = 1
         self.port = port
         self.last_error = None
@@ -167,6 +168,7 @@ class Panel:
         try:
             if parts[0] == "RDY":
                 self.ready = True
+                self.banner = " ".join(parts[1:])      # e.g. "jarvis v2": which sketch is on the board
             elif parts[0] == "E" and len(parts) >= 3:
                 self.on_encoder(int(parts[1]), int(parts[2]))
             elif parts[0] == "B" and len(parts) >= 2:

@@ -268,7 +268,7 @@ void setup() {
   lcd.begin(16, 2);
   lcd.clear();
   lcd.print("Jarvis");
-  Serial.println("RDY jarvis");
+  Serial.println("RDY jarvis v2");   // v2 = c on the LCD + quadrature decoder
 }
 
 /* ----------------------------------------------------------------- loop */

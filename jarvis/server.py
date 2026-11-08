@@ -43,6 +43,10 @@ class App:
             self.panel = hardware.Panel(args.port, on_encoder=self._on_encoder,
                                         on_select=self._on_select)
             if self.panel.enabled:
+                print(f"panel: {self.panel.port}, firmware: {self.panel.banner or 'no RDY seen'}")
+                if self.panel.banner and "v2" not in self.panel.banner:
+                    print("!! old Arduino sketch: re-upload arduino/jarvis_panel/jarvis_panel.ino "
+                          "or the LCD will not show c")
                 for i, (name, _, _) in enumerate(config.AGENTS, 1):
                     self.panel.set_name(i, name)
                 self.panel.calibrate()              # speedometer sweep on start-up
@@ -76,19 +80,26 @@ class App:
         last_full = 0
         while self.panel.enabled:
             run = self.run
+            now = time.time()
             if run:
-                now = time.time()
+                rows = []
                 for ag in run.agents:
                     st = (hardware.STATE_SUCCESS if ag.status == "success" else
                           hardware.STATE_FAILED if ag.status == "failed" else
                           hardware.STATE_RUNNING)
-                    adi = run.live_adi(ag)          # measured ADI, floored by the time ramp
-                    key = (int(round(adi)), st, round(ag.coef, 2))   # c change -> resend now
-                    if self._hw_last.get(ag.idx) != key or now - last_full > 2:
-                        self.panel.send_agent(ag.idx, adi, st, ag.coef)
-                        self._hw_last[ag.idx] = key
-                if now - last_full > 2:
-                    last_full = now
+                    # measured ADI floored by the time ramp; c straight from the agent
+                    rows.append((ag.idx, run.live_adi(ag), st, ag.coef))
+            else:
+                # no run yet: show each agent's starting c so the LCD is never blank
+                rows = [(i, 0.0, hardware.STATE_RUNNING, c)
+                        for i, (_, c, _) in enumerate(config.AGENTS, 1)]
+            for idx, adi, st, coef in rows:
+                key = (int(round(adi)), st, round(coef, 2))   # c change -> resend now
+                if self._hw_last.get(idx) != key or now - last_full > 2:
+                    self.panel.send_agent(idx, adi, st, coef)
+                    self._hw_last[idx] = key
+            if now - last_full > 2:
+                last_full = now
             time.sleep(config.HW_PERIOD_S)
 
     # ------------------------------------------------------------ runs
@@ -121,7 +132,8 @@ class App:
         s["model"] = self.brain_status
         s["selected"] = self.selected
         s["panel"] = (None if not self.args.serial else
-                      ("connected " + str(self.panel.port)) if self.panel.enabled
+                      (f"connected {self.panel.port} ({self.panel.banner or 'no RDY'})")
+                      if self.panel.enabled
                       else f"not connected ({self.panel.last_error})")
         s["adi_max"] = config.ADI_MAX
         return s
