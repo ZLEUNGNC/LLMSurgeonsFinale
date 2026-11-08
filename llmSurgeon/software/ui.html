@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>llmSurgeon</title>
+<style>
+  :root {
+    --bg: #faf9f7; --panel: #ffffff; --line: #e3e0da; --ink: #1c1a17;
+    --muted: #6d675e; --accent: #2f6f4f; --warn: #a85a1f; --bad: #9c3328;
+    --wait: #5b7a9c; --page: #b3862f; --restart: #9c3328; --knob: #4a3f8f;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #16171a; --panel: #1e2024; --line: #30343a; --ink: #e9e6e1;
+      --muted: #969086; --accent: #6fbf8f; --warn: #d79a52; --bad: #e07a6c;
+      --wait: #86a8cc; --page: #d9b457; --restart: #e07a6c; --knob: #9b8ee0;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #16171a; --panel: #1e2024; --line: #30343a; --ink: #e9e6e1;
+    --muted: #969086; --accent: #6fbf8f; --warn: #d79a52; --bad: #e07a6c;
+    --wait: #86a8cc; --page: #d9b457; --restart: #e07a6c; --knob: #9b8ee0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 16px;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+  h2 { font-size: 12px; margin: 0 0 10px; text-transform: uppercase;
+       letter-spacing: 0.07em; color: var(--muted); font-weight: 600; }
+  .wrap { max-width: 1240px; margin: 0 auto; }
+  header { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: baseline;
+           margin-bottom: 14px; }
+  .chip { font-size: 11px; padding: 3px 9px; border-radius: 999px;
+          border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .chip.good { color: var(--accent); border-color: var(--accent); }
+  .chip.bad  { color: var(--bad); border-color: var(--bad); }
+  .card { background: var(--panel); border: 1px solid var(--line);
+          border-radius: var(--radius); padding: 14px; margin-bottom: 14px; }
+  .grid { display: grid; gap: 14px; grid-template-columns: 1fr; }
+  @media (min-width: 900px) { .grid.three { grid-template-columns: repeat(3, 1fr); } }
+  @media (min-width: 900px) { .grid.split { grid-template-columns: 1.15fr 1fr; } }
+
+  /* agent card */
+  .agent { border-left: 3px solid var(--line); }
+  .agent.sel { border-left-color: var(--knob); }
+  .agent .top { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+  .agent .nm { font-weight: 650; font-size: 15px; }
+  .led { width: 9px; height: 9px; border-radius: 50%; background: var(--line);
+         flex: none; }
+  .led.on { background: var(--accent); box-shadow: 0 0 7px var(--accent); }
+  .act { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; margin: 6px 0 2px; }
+  .act.wait { color: var(--wait); } .act.page { color: var(--page); }
+  .act.restart { color: var(--restart); }
+  .act.fold { color: var(--wait); } .act.call { color: var(--page); }
+  .act.raise { color: var(--restart); }
+
+  .bars { margin: 8px 0; }
+  .barrow { display: grid; grid-template-columns: 54px 1fr 42px; gap: 7px;
+            align-items: center; font-size: 11px; margin-bottom: 3px; }
+  .track { height: 7px; background: var(--line); border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; border-radius: 4px; transition: width .18s ease; }
+
+  .ctl { margin-top: 10px; }
+  .ctl label { display: flex; justify-content: space-between; font-size: 11px;
+               color: var(--muted); margin-bottom: 3px; }
+  input[type=range] { width: 100%; accent-color: var(--knob); margin: 0; }
+  .impact { font-size: 11px; margin-top: 7px; padding: 6px 8px; border-radius: 6px;
+            background: var(--bg); border: 1px dashed var(--line); color: var(--muted); }
+  .impact.hot { border-color: var(--knob); color: var(--ink); }
+  .flash { animation: fl .7s ease; }
+  @keyframes fl { 0% { background: var(--knob); color: var(--panel); } 100% {} }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  td, th { text-align: left; padding: 3px 6px 3px 0; }
+  th { color: var(--muted); font-weight: 600; }
+  pre { margin: 0; white-space: pre-wrap; font-size: 12px; line-height: 1.45; }
+
+  .feed { max-height: 330px; overflow-y: auto; font-size: 11.5px; }
+  .ev { display: grid; grid-template-columns: 62px 70px 1fr; gap: 6px;
+        padding: 3px 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+  .ev .k { font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+           color: var(--muted); }
+  .ev.rotate  .k, .ev.impact .k { color: var(--knob); font-weight: 700; }
+  .ev.select  .k { color: var(--accent); }
+  .ev.error   .k { color: var(--bad); }
+  .ev .d { color: var(--ink); }
+
+  button { font: inherit; font-size: 12px; padding: 6px 11px; border-radius: 7px;
+           border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+           cursor: pointer; }
+  button:hover { border-color: var(--knob); }
+  button.on { background: var(--knob); color: #fff; border-color: var(--knob); }
+  .row { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+  .big { font-size: 22px; font-weight: 650; letter-spacing: -0.02em; }
+  .sub { font-size: 11px; color: var(--muted); }
+  .warnbox { border-color: var(--warn); color: var(--warn); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>llmSurgeon</h1>
+  <span id="c-mode" class="chip">…</span>
+  <span id="c-model" class="chip">…</span>
+  <span id="c-panel" class="chip">…</span>
+  <span id="c-round" class="chip">…</span>
+  <span style="flex:1"></span>
+  <span id="c-status" class="chip">connecting…</span>
+</header>
+
+<div id="modewarn" class="card warnbox" hidden>
+  Running the <b>logit-bias fallback</b>, not activation steering. The knob is biasing output
+  logits, not hidden states — don't describe it as activation steering while this shows.
+</div>
+
+<!-- ================= did my rotation land? ================= -->
+<div class="card">
+  <h2>Did the encoder reach the laptop?</h2>
+  <div class="row" style="gap:18px; align-items:flex-start">
+    <div>
+      <div id="imp-big" class="big">no knob events yet</div>
+      <div id="imp-sub" class="sub">Turn the encoder. Every line the panel sends appears
+        below, raw, with the coefficient it changed.</div>
+    </div>
+  </div>
+  <div class="grid three" id="impacts" style="margin-top:12px"></div>
+</div>
+
+<div class="grid split">
+  <!-- ================= scenario ================= -->
+  <div class="card">
+    <h2>Current alert</h2>
+    <pre id="scn" class="mono">…</pre>
+    <table style="margin-top:12px">
+      <tr><th>Correct answer</th><td id="truth" class="mono">…</td></tr>
+      <tr><th>Weighted consensus</th><td id="cons" class="mono">…</td></tr>
+      <tr><th>Session</th><td id="score" class="mono">…</td></tr>
+    </table>
+  </div>
+
+  <!-- ================= event feed ================= -->
+  <div class="card">
+    <h2>Panel &amp; control log</h2>
+    <div id="feed" class="feed mono"></div>
+  </div>
+</div>
+
+<!-- ================= agents ================= -->
+<div class="grid three" id="agents"></div>
+
+<!-- ================= global controls ================= -->
+<div class="card">
+  <h2>Controls</h2>
+  <div class="row">
+    <button id="b-pause">Pause</button>
+    <button id="b-next">Next alert</button>
+    <button id="b-reset">Reset knobs</button>
+    <span style="width:14px"></span>
+    <button id="b-vibe" class="on">Vibrate about centre</button>
+    <button id="b-servo">Servos show agent</button>
+    <button id="b-relax">Relax servos</button>
+  </div>
+  <div class="ctl" style="max-width:360px">
+    <label><span>Max steering strength</span><span id="ms-val" class="mono">…</span></label>
+    <input id="ms" type="range" min="0.5" max="6" step="0.1">
+    <div class="sub" id="ms-note"></div>
+  </div>
+</div>
+
+<div class="card sub" id="meta"></div>
+
+</div>
+<script>
+const $ = id => document.getElementById(id);
+let S = null, lastEventMono = 0, lastKnobCounts = {};
+
+async function post(what, extra) {
+  try {
+    await fetch('/api/control', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(Object.assign({what}, extra || {}))
+    });
+  } catch (e) {}
+}
+
+function pct(x) { return Math.max(0, Math.min(100, x * 100)); }
+function actColour(a) { return a || 'wait'; }
+
+function renderAgents(s) {
+  const host = $('agents');
+  if (host.children.length !== s.agents.length) {
+    host.innerHTML = s.agents.map(a => `
+      <div class="card agent" id="ag${a.i}">
+        <div class="top">
+          <span class="led" id="led${a.i}"></span>
+          <span class="nm">${a.name}</span>
+          <span class="sub" id="sel${a.i}"></span>
+        </div>
+        <div class="act" id="act${a.i}">…</div>
+        <div class="bars" id="bars${a.i}"></div>
+        <div class="ctl">
+          <label><span>Steering coefficient</span><span class="mono" id="cv${a.i}"></span></label>
+          <input type="range" id="cr${a.i}" min="-6" max="6" step="0.05">
+        </div>
+        <div class="ctl">
+          <label><span>Presence (vote weight)</span><span class="mono" id="av${a.i}"></span></label>
+          <input type="range" id="ar${a.i}" min="0" max="1" step="0.05">
+        </div>
+        <table style="margin-top:8px">
+          <tr><th>Attention</th><td class="mono" id="att${a.i}"></td></tr>
+          <tr><th>Spine</th><td class="mono" id="sp${a.i}"></td></tr>
+          <tr><th>Influence</th><td class="mono" id="in${a.i}"></td></tr>
+          <tr><th>Servo angle</th><td class="mono" id="an${a.i}"></td></tr>
+        </table>
+      </div>`).join('');
+    s.agents.forEach(a => {
+      const cr = $('cr' + a.i), ar = $('ar' + a.i);
+      cr.addEventListener('input', () => {
+        $('cv' + a.i).textContent = (+cr.value).toFixed(2);
+        post('coef', {i: a.i, value: +cr.value});
+      });
+      ar.addEventListener('input', () => {
+        $('av' + a.i).textContent = (+ar.value).toFixed(2);
+        post('alpha', {i: a.i, value: +ar.value});
+      });
+    });
+  }
+
+  s.agents.forEach(a => {
+    $('ag' + a.i).className = 'card agent' + (a.selected ? ' sel' : '');
+    $('sel' + a.i).textContent = a.selected ? 'selected on panel' : '';
+    $('led' + a.i).className = 'led' + (a.led ? ' on' : '');
+    const act = $('act' + a.i);
+    act.textContent = (a.action || '—').toUpperCase();
+    act.className = 'act ' + actColour(a.action);
+
+    $('bars' + a.i).innerHTML = s.actions.map(k => `
+      <div class="barrow">
+        <span>${k}</span>
+        <span class="track"><span class="fill" style="width:${pct(a.probs[k])}%;
+          background:var(--${k})"></span></span>
+        <span class="mono">${a.probs[k].toFixed(2)}</span>
+      </div>`).join('') + `
+      <div class="barrow" style="margin-top:6px">
+        <span>attention</span>
+        <span class="track"><span class="fill" style="width:${pct(a.attention)}%;
+          background:var(--knob)"></span></span>
+        <span class="mono">${a.attention.toFixed(2)}</span>
+      </div>`;
+
+    const cr = $('cr' + a.i);
+    cr.min = -s.max_strength; cr.max = s.max_strength;
+    if (document.activeElement !== cr) cr.value = a.coef;
+    $('cv' + a.i).textContent = a.coef.toFixed(2);
+    const ar = $('ar' + a.i);
+    if (document.activeElement !== ar) ar.value = a.alpha;
+    $('av' + a.i).textContent = a.alpha.toFixed(2);
+
+    $('att' + a.i).textContent = a.attention.toFixed(2) +
+      '  (' + Math.round(a.attention * 45) + '° sweep)';
+    $('sp' + a.i).textContent = a.spine === null ? '—' : a.spine.toFixed(2);
+    $('in' + a.i).textContent = (a.influence >= 0 ? '+' : '') + a.influence.toFixed(2);
+    $('an' + a.i).textContent = a.angle.toFixed(0) + '°';
+  });
+}
+
+function renderImpacts(s) {
+  const any = s.agents.some(a => a.knob_events > 0);
+  const total = s.agents.reduce((n, a) => n + a.knob_events, 0);
+  const recent = s.agents.filter(a => a.knob_age !== null)
+                         .sort((x, y) => x.knob_age - y.knob_age)[0];
+  if (!any) {
+    $('imp-big').textContent = s.panel_ok ? 'no knob events yet'
+                                          : 'panel not connected';
+    $('imp-big').style.color = s.panel_ok ? '' : 'var(--bad)';
+    $('imp-sub').textContent = s.panel_ok
+      ? 'Panel is connected. Turn the encoder — if nothing appears here, the laptop is not hearing it, which is a wiring problem, not a model problem.'
+      : 'Start with --serial, and close the Arduino IDE Serial Monitor first (only one program can hold the port).';
+  } else {
+    $('imp-big').textContent = total + ' knob event' + (total === 1 ? '' : 's') +
+      (recent ? ` · last ${recent.knob_age}s ago on ${recent.name}` : '');
+    $('imp-big').style.color = 'var(--accent)';
+    $('imp-sub').textContent = 'The encoder is reaching the laptop and changing coefficients.';
+  }
+
+  $('impacts').innerHTML = s.agents.map(a => `
+    <div class="impact ${a.knob_age !== null && a.knob_age < 4 ? 'hot' : ''}" id="imp${a.i}">
+      <b>${a.name}</b> — ${a.knob_events} event${a.knob_events === 1 ? '' : 's'}
+      ${a.knob_age !== null ? `· ${a.knob_age}s ago` : '· never'}<br>
+      ${a.prev_coef !== null
+        ? `coefficient <span class="mono">${a.prev_coef.toFixed(2)} → ${a.coef.toFixed(2)}</span>`
+        : `coefficient <span class="mono">${a.coef.toFixed(2)}</span> (unchanged by panel)`}
+    </div>`).join('');
+
+  s.agents.forEach(a => {
+    if (lastKnobCounts[a.i] !== undefined && a.knob_events > lastKnobCounts[a.i]) {
+      const el = $('imp' + a.i);
+      if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+    }
+    lastKnobCounts[a.i] = a.knob_events;
+  });
+}
+
+function renderFeed(s) {
+  $('feed').innerHTML = s.events.map(e => `
+    <div class="ev ${e.kind}">
+      <span class="sub">${e.t}</span>
+      <span class="k">${e.kind}</span>
+      <span class="d">${e.line ? '<b>' + e.line + '</b> ' : ''}${e.detail || ''}</span>
+    </div>`).join('') || '<div class="sub">nothing yet</div>';
+}
+
+function render(s) {
+  S = s;
+  $('c-mode').textContent = s.mode === 'activation'
+    ? `activation steering · layer ${s.steer_layer}→${s.read_layer} of ${s.n_layers}`
+    : 'LOGIT-BIAS fallback';
+  $('c-mode').className = 'chip ' + (s.mode === 'activation' ? 'good' : 'bad');
+  $('modewarn').hidden = s.mode === 'activation';
+  $('c-model').textContent = `${s.model.split('/').pop()} · ${s.device} · ${s.world}`;
+  $('c-panel').textContent = s.panel;
+  $('c-panel').className = 'chip ' + (s.panel_ok ? 'good' : '');
+  $('c-round').textContent = `round ${s.round}/${s.rounds_per_scenario}`;
+  $('c-status').textContent = s.paused ? 'paused' : s.status;
+  $('b-pause').textContent = s.paused ? 'Resume' : 'Pause';
+  $('b-pause').className = s.paused ? 'on' : '';
+
+  if (s.scenario) {
+    $('scn').textContent = s.scenario.text;
+    $('truth').textContent = (s.scenario.truth || '—').toUpperCase() +
+      (s.scenario.urgency !== null ? `   (urgency ${s.scenario.urgency})` : '');
+  }
+  const c = s.consensus;
+  $('cons').textContent = `${(c.action || '—').toUpperCase()}  ` +
+    s.actions.map(a => `${a}=${c.probs[a].toFixed(2)}`).join('  ') +
+    `   ${c.agree}/${s.agents.length} agree   ` +
+    (c.correct === null ? '' : c.correct ? '✓ correct' : '✗ wrong');
+  $('score').textContent = `${s.scores.correct}/${s.scores.rounds} correct · ` +
+    `mean regret ${s.scores.regret}`;
+
+  if (document.activeElement !== $('ms')) $('ms').value = s.max_strength;
+  $('ms-val').textContent = (+s.max_strength).toFixed(1);
+  $('ms-note').textContent = s.max_strength > 2.0
+    ? 'Above the measured monotonic limit of 2.0 — past there the steering effect reverses.'
+    : 'Within the measured monotonic range.';
+  $('ms-note').style.color = s.max_strength > 2.0 ? 'var(--warn)' : 'var(--muted)';
+
+  $('meta').textContent =
+    `attention is normalised against the live margin range ` +
+    `[${s.margin_range[0]}, ${s.margin_range[1]}], so it is relative: how torn this agent is ` +
+    `versus how torn agents have been recently. Servo sweep = attention × 45°. ` +
+    `Transport: ${s.panel_kind}.`;
+
+  renderImpacts(s);
+  renderAgents(s);
+  renderFeed(s);
+}
+
+async function tick() {
+  try {
+    const r = await fetch('/api/state');
+    render(await r.json());
+    $('c-status').className = 'chip good';
+  } catch (e) {
+    $('c-status').textContent = 'disconnected — is ui.py still running?';
+    $('c-status').className = 'chip bad';
+  }
+}
+
+$('b-pause').onclick = () => post('pause', {value: !(S && S.paused)});
+$('b-next').onclick  = () => post('next');
+$('b-reset').onclick = () => post('reset');
+let vibe = true, servoAgent = true, relaxed = false;
+$('b-vibe').onclick = e => {
+  vibe = !vibe; e.target.className = vibe ? 'on' : '';
+  e.target.textContent = vibe ? 'Vibrate about centre' : 'Vibrate about angle';
+  post('vibe', {value: vibe});
+};
+$('b-servo').onclick = e => {
+  servoAgent = !servoAgent; e.target.className = servoAgent ? '' : 'on';
+  e.target.textContent = servoAgent ? 'Servos show agent' : 'Servos mirror knob';
+  post('servo', {value: !servoAgent});
+};
+$('b-relax').onclick = e => {
+  relaxed = !relaxed; e.target.className = relaxed ? 'on' : '';
+  e.target.textContent = relaxed ? 'Servos relaxed' : 'Relax servos';
+  post('relax', {value: relaxed});
+};
+$('ms').addEventListener('input', e => {
+  $('ms-val').textContent = (+e.target.value).toFixed(1);
+  post('max_strength', {value: +e.target.value});
+});
+
+tick();
+setInterval(tick, 300);
+</script>
+</body>
+</html>

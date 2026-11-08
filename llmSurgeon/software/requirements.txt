@@ -1,0 +1,18 @@
+# CPU-only is fine, but if the machine has an NVIDIA GPU install torch from the CUDA index
+# FIRST, otherwise pip gives you the CPU-only wheel on Windows and everything runs ~20x
+# slower with torch.cuda.is_available() == False:
+#
+#   pip install torch --index-url https://download.pytorch.org/whl/cu130
+#   pip install -r requirements.txt
+#
+# If a model download crawls at tens of KB/s, the HuggingFace xet backend has throttled
+# itself. Set this and it goes back to full speed:
+#
+#   HF_HUB_DISABLE_XET=1
+#
+torch
+transformers
+accelerate
+pyserial       # Arduino Mega panel over USB (serial_link.py). Imported lazily, so without
+               # it everything still runs but --serial silently never connects.
+treys          # poker world only (WORLD=poker); the incident world needs no extra deps

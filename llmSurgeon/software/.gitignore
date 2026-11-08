@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pt
+# ...but DO commit the steering vectors. They are 15-20 KB, and shipping
+# them means a fresh clone does not have to rebuild them (which needs the model
+# downloaded first). Rebuild if you change MODEL, describe(), or the layer.
+!risk_vec_*.pt
