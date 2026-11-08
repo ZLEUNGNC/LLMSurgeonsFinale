@@ -1,0 +1,9 @@
+# Intel Arc (XPU) build of torch -- install it FIRST, from the XPU index:
+#   .venv/Scripts/pip install torch --index-url https://download.pytorch.org/whl/xpu
+# (NVIDIA: use https://download.pytorch.org/whl/cu130 instead; plain `pip install torch` on
+#  Windows gives the CPU-only wheel.)
+torch
+transformers
+accelerate
+docker         # Docker Engine API: sandbox, stats, events, inspect, diff, top
+pyserial       # Arduino Mega panel over USB

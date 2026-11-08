@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Steganography</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+  <h1>Steganography</h1>
+  <p class="sub"><a href="/">&larr; back</a></p>
+  <form id="f" class="card">
+    <label for="files">Images, videos or audio to analyse</label>
+    <input id="files" name="files" type="file" multiple accept="image/*,video/*,audio/*" required>
+    <label for="flag">Expected flag (leave blank if no flag is planted)</label>
+    <input id="flag" name="flag" type="text" autocomplete="off" placeholder="e.g. flag{...}">
+    <p><button id="go" type="submit">Start agents</button></p>
+    <div id="err" class="err"></div>
+  </form>
+</main>
+<script>
+document.getElementById("f").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const go = document.getElementById("go"), err = document.getElementById("err");
+  go.disabled = true; err.textContent = "Uploading...";
+  try {
+    const r = await fetch("/api/run", { method: "POST", body: new FormData(e.target) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    location.href = "/run";
+  } catch (x) {
+    err.textContent = x.message; go.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

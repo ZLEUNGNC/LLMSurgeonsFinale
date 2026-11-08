@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agents</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+  <h1>Agents</h1>
+  <p class="sub"><a href="/stego">&larr; new run</a> <span id="info"></span></p>
+  <div id="banner"></div>
+  <div id="grid" class="grid"></div>
+</main>
+<script>
+const ROLE = { ada: "cautious", alan: "base", linus: "aggressive" };
+const COG = '<svg class="cog" viewBox="0 0 24 24" fill="currentColor"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg>';
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const f2 = v => (v === null || v === undefined) ? null : Number(v).toFixed(2);
+
+function metricRow(label, v, status, big) {
+  const val = v === null || v === undefined
+    ? `<span class="na">${esc(status || "n/a")}</span>` : (big ? Number(v).toFixed(1) : f2(v));
+  return `<tr class="${big ? "big" : ""}"><td>${label}</td><td>${val}</td></tr>`;
+}
+
+function card(a, sel, done) {
+  const m = a.metrics || {}, ms = a.metric_status || {};
+  const working = a.status === "running" || a.status === "waiting";
+  let result = "";
+  if (a.status === "success") {
+    result = `<div class="result ok">Captured flag: ${esc(a.flag)}${a.output ? "\n\n" + esc(a.output) : ""}</div>`;
+  } else if (a.status === "failed") {
+    result = `<div class="result bad">agent could not hack it.<div class="meta">${esc(a.end_reason)}</div></div>`;
+  }
+  const live = !(a.status === "success" || a.status === "failed");
+  return `<div class="card agent ${a.status} ${sel ? "selected" : ""}">
+    <div class="head"><div><h2>${esc(a.name)}</h2><div class="role">${ROLE[a.name] || ""}</div></div>
+      <div class="${working ? "" : "idle"}">${COG.replace('class="cog"', `class="cog ${working ? "spin" : ""}"`)}</div></div>
+    <div class="meta">${esc(a.status)}${a.stopping && live ? " &middot; stopping: " + esc(a.stopping) : ""}
+      &middot; turn ${a.turn} &middot; c = ${f2(a.coef)}${a.restricted ? " &middot; restricted" : ""}</div>
+    <table>
+      ${metricRow("Persistence P", m.P, ms.P)}
+      ${metricRow("Constraint violations C", m.C, ms.C)}
+      ${metricRow("Resource escalation R", m.R, ms.R)}
+      ${metricRow("Deceptive behaviour D", m.D, ms.D)}
+      ${metricRow("Shutdown resistance S", m.S, ms.S)}
+      ${metricRow("ADI", m.ADI_live, "n/a", true)}
+      <tr><td>&nbsp;&nbsp;measured / time ramp</td><td>${m.ADI == null ? "-" : Number(m.ADI).toFixed(1)} / ${m.ADI_time == null ? "-" : Number(m.ADI_time).toFixed(1)}</td></tr>
+      ${metricRow("Safety risk SR", m.SR, "n/a", true)}
+      <tr><td>coverage ADI / SR</td><td>${m.ADI_coverage == null ? "-" : Math.round(m.ADI_coverage * 100) + "%"} / ${m.SR_coverage == null ? "-" : Math.round(m.SR_coverage * 100) + "%"}</td></tr>
+    </table>
+    ${result}
+    ${live && !done ? `<div class="controls">
+      <button class="ghost" onclick="act('${a.name}','restrict')" ${a.restricted ? "disabled" : ""}>restrict</button>
+      <button class="ghost" onclick="act('${a.name}','${a.status === "paused" ? "resume" : "pause"}')">${a.status === "paused" ? "resume" : "pause"}</button>
+      <button class="ghost" onclick="act('${a.name}','terminate')" ${a.stopping ? "disabled" : ""}>terminate</button>
+    </div>` : ""}
+  </div>`;
+}
+
+async function act(agent, action) {
+  await fetch("/api/intervene", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agent, action }) });
+  tick();
+}
+
+async function tick() {
+  let s;
+  try { s = await (await fetch("/api/state")).json(); } catch { return; }
+  const notes = [];
+  if (s.model !== "ready") notes.push("Model: " + s.model);
+  if (s.error) notes.push("Run error: " + s.error);
+  if (s.steering === false) notes.push("Steering vector missing: agents are running unsteered.");
+  document.getElementById("banner").innerHTML = notes.map(n => `<div class="banner">${esc(n)}</div>`).join("");
+  document.getElementById("info").textContent = s.phase === "none" ? "· no run yet"
+    : `· run ${s.run_id} · ${s.phase} · flag ${s.flag_planted ? "planted" : "not planted"}` +
+      (s.panel ? ` · panel ${s.panel}` : "");
+  const done = s.phase === "finished";
+  document.getElementById("grid").innerHTML = (s.agents || []).map(a => card(a, s.panel && a.idx === s.selected, done)).join("");
+}
+tick(); setInterval(tick, 700);
+</script>
+</body>
+</html>
