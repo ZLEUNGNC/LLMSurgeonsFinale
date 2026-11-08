@@ -4,9 +4,12 @@ Laptop <-> Arduino Mega 2560 over USB serial (adapted from llmSurgeon/software/s
 Wire format, newline-terminated ASCII. Must match arduino/jarvis_panel/protocol.h.
 
   laptop -> Arduino
-    A <idx> <adi> <state>   agent reading. idx 1..3, adi 0..100 (integer),
+    A <idx> <adi> <state> [c100]
+                            agent reading. idx 1..3, adi 0..100 (integer),
                             state 0 = running/idle, 1 = captured flag (green LED),
-                            2 = failed / max desperation (red LED, servo to 0)
+                            2 = failed / max desperation (red LED, servo to 0),
+                            c100 = steering coefficient x 100 (integer; avr sscanf has
+                            no %f), shown on the LCD so encoder turns are visible live
     N <idx> <name>          agent display name (<= 10 chars)
     M <text>                status / error message for the LCD (<= 16 chars)
     C                       servo calibration sweep: 0 -> 180 -> 0
@@ -57,9 +60,12 @@ def guess_port():
     return cands[0].device if len(cands) == 1 else None
 
 
-def encode_agent(idx, adi, state):
+def encode_agent(idx, adi, state, coef=None):
     adi = 0 if adi is None else int(round(max(0.0, min(100.0, float(adi)))))
-    return f"A {int(idx)} {adi} {int(state)}"
+    line = f"A {int(idx)} {adi} {int(state)}"
+    if coef is not None:
+        line += f" {int(round(max(-99.99, min(99.99, float(coef))) * 100))}"
+    return line
 
 
 def encode_name(idx, name):
@@ -123,8 +129,8 @@ class Panel:
             if "timeout" not in type(e).__name__.lower():
                 self.enabled = False
 
-    def send_agent(self, idx, adi, state):
-        self.write(encode_agent(idx, adi, state))
+    def send_agent(self, idx, adi, state, coef=None):
+        self.write(encode_agent(idx, adi, state, coef))
 
     def set_name(self, idx, name):
         self.write(encode_name(idx, name))

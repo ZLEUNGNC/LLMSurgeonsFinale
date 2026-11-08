@@ -83,9 +83,9 @@ class App:
                           hardware.STATE_FAILED if ag.status == "failed" else
                           hardware.STATE_RUNNING)
                     adi = run.live_adi(ag)          # measured ADI, floored by the time ramp
-                    key = (int(round(adi)), st)
+                    key = (int(round(adi)), st, round(ag.coef, 2))   # c change -> resend now
                     if self._hw_last.get(ag.idx) != key or now - last_full > 2:
-                        self.panel.send_agent(ag.idx, adi, st)
+                        self.panel.send_agent(ag.idx, adi, st, ag.coef)
                         self._hw_last[ag.idx] = key
                 if now - last_full > 2:
                     last_full = now

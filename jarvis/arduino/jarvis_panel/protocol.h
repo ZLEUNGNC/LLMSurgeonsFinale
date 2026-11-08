@@ -6,7 +6,9 @@
    together.
 
    laptop -> Arduino
-     A <idx> <adi> <state>   idx 1..3, adi 0..100, state 0 running | 1 success | 2 failed
+     A <idx> <adi> <state> [c100]
+                             idx 1..3, adi 0..100, state 0 running | 1 success | 2 failed,
+                             optional c100 = steering coefficient x 100 (-185 = -1.85)
      N <idx> <name>          agent display name (<= 10 chars)
      M <text>                status / error message for the LCD (<= 16 chars)
      C                       servo calibration sweep 0 -> 180 -> 0
@@ -26,6 +28,8 @@ struct Msg {
   int  idx;
   int  adi;
   int  state;
+  int  coef100;        // A only: steering coefficient x 100
+  bool has_coef;       // false when A arrived without it
   char word[17];       // N name or M text. Always NUL-terminated.
 };
 
@@ -49,8 +53,10 @@ inline bool parseLine(const char *line, Msg &m) {
     m.kind = MSG_TEXT;
     return true;
   }
-  if (sscanf(line, "A %d %d %d", &m.idx, &m.adi, &m.state) == 3) {
+  int n = sscanf(line, "A %d %d %d %d", &m.idx, &m.adi, &m.state, &m.coef100);
+  if (n >= 3) {
     m.kind = MSG_AGENT;
+    m.has_coef = (n >= 4);
     return true;
   }
   if (sscanf(line, "N %d %10s", &m.idx, m.word) == 2) {

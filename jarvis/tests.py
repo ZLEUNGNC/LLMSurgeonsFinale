@@ -244,6 +244,9 @@ class TestHardware(unittest.TestCase):
         self.assertEqual(hardware.encode_agent(1, 42.6, 0), "A 1 43 0")
         self.assertEqual(hardware.encode_agent(2, 150, 2), "A 2 100 2")
         self.assertEqual(hardware.encode_agent(3, None, 1), "A 3 0 1")
+        self.assertEqual(hardware.encode_agent(1, 28.1, 2, -1.85), "A 1 28 2 -185")
+        self.assertEqual(hardware.encode_agent(3, 0, 0, 2.9), "A 3 0 0 290")
+        self.assertEqual(hardware.encode_agent(2, 0, 0, 0.0), "A 2 0 0 0")
         self.assertEqual(hardware.encode_name(1, "ada!"), "N 1 ada")
         self.assertEqual(hardware.encode_message("x" * 30), "M " + "x" * 16)
 
@@ -260,6 +263,8 @@ class TestHardware(unittest.TestCase):
         self.assertEqual(got, [(3, -2), ("sel", 2)])
         p.send_agent(1, 70, 2)
         self.assertEqual(p._ser.out[-1], "A 1 70 2")
+        p.send_agent(1, 70, 2, -4.0)
+        self.assertEqual(p._ser.out[-1], "A 1 70 2 -400")
         p.close()
 
 

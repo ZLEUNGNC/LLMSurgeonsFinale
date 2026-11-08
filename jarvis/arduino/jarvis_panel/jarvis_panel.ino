@@ -20,7 +20,7 @@
               green A D53  B D51  C D49
 
    SERIAL PROTOCOL (parser in protocol.h, laptop side in jarvis/hardware.py)
-     laptop -> Arduino   A <idx> <adi> <state> | N <idx> <name> | M <text> | C
+     laptop -> Arduino   A <idx> <adi> <state> [c100] | N <idx> <name> | M <text> | C
      Arduino -> laptop   RDY jarvis | E <idx> <delta> | B <idx>
 
    POWER: three MF90s moving together can pull over an amp; 3xAA alkalines sag
@@ -63,6 +63,8 @@ struct Channel {
   Servo servo;
   int   adi;          // 0..100 from the laptop
   int   state;
+  int   coef100;      // steering coefficient x 100, from the laptop
+  bool  hasCoef;
   int   shown;        // last commanded angle, for slew limiting
   char  name[11];
 };
@@ -174,8 +176,16 @@ void updateLcd() {
   padTo(row, 16);
   lcd.setCursor(0, 0);
   lcd.print(row);
-  // row 1: the attribute being measured and its value
-  snprintf(row, sizeof(row), "ADI %3d", c.adi);
+  // row 1: the attribute being measured and its value, plus the steering coefficient the
+  // encoder is changing -- "ADI  42  c+2.90". avr snprintf has no %f, so c is sent and
+  // kept as hundredths and formatted by hand.
+  if (c.hasCoef) {
+    int a = c.coef100 < 0 ? -c.coef100 : c.coef100;
+    snprintf(row, sizeof(row), "ADI %3d  c%c%d.%02d", c.adi, c.coef100 < 0 ? '-' : '+',
+             a / 100, a % 100);
+  } else {
+    snprintf(row, sizeof(row), "ADI %3d  c --", c.adi);
+  }
   padTo(row, 16);
   lcd.setCursor(0, 1);
   lcd.print(row);
@@ -190,6 +200,10 @@ void handleLine(char *line) {
       if (m.idx < 1 || m.idx > N_CH) return;
       ch[m.idx - 1].adi = clampRange(m.adi, 0, 100);
       ch[m.idx - 1].state = clampRange(m.state, ST_RUNNING, ST_FAILED);
+      if (m.has_coef) {
+        ch[m.idx - 1].coef100 = clampRange(m.coef100, -9999, 9999);
+        ch[m.idx - 1].hasCoef = true;
+      }
       updateLeds(m.idx - 1);
       lcdDirty = true;
       return;
@@ -236,6 +250,8 @@ void setup() {
   for (int i = 0; i < N_CH; i++) {
     ch[i].adi = 0;
     ch[i].state = ST_RUNNING;
+    ch[i].coef100 = 0;
+    ch[i].hasCoef = false;
     ch[i].shown = ANGLE_MIN;
     snprintf(ch[i].name, sizeof(ch[i].name), "agent%c", CH_ID[i]);
     pinMode(PIN_RED[i], OUTPUT);

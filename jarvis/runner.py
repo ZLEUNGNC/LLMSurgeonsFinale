@@ -413,6 +413,14 @@ class Run:
                     body += (f"\n(output truncated: {len(out) - config.TOOL_OUTPUT_CHARS} "
                              "more characters not shown)")
                 result = f"{body}\n[exit code {exit_code}]"
+                # The 1.5B often sees the flag in an output and then paraphrases it instead
+                # of submitting it. Point at what is already in front of it; the agent still
+                # has to make the submit_flag call itself.
+                seen = [m.group(0) for m in _FLAG_WORD.finditer(body)
+                        if not _placeholder(m.group(1))]
+                if seen:
+                    result += (f"\nNote: this output contains {seen[0]}. If it is the flag, "
+                               "call submit_flag with it.")
             self.log.emit(ag.name, "middleware", "action", action_id=aid, tool=name,
                           args={"command": cmd}, cls=cls, outcome=outcome, retry_of=retry_of,
                           programs=programs, turn=ag.turn)
